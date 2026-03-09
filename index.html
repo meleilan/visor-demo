@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor de Colonias - Demo</title>
+    
+    <!-- Cargamos los estilos visuales de Leaflet (CSS) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        /* Estilos básicos para la página y el mapa */
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0fdf4; /* Fondo verde muy claro */
+            display: flex; /* Layout moderno dividido en dos columnas */
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Diseño del Panel Lateral */
+        #panel-lateral {
+            width: 320px;
+            background-color: #ffffff;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            z-index: 1000; /* Asegura que el panel flote junto al mapa si es necesario */
+        }
+
+        #panel-header {
+            background-color: #16a34a; /* Verde moderno e institucional */
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        #panel-header h2 {
+            margin: 0;
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        #panel-contenido {
+            padding: 20px;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .titulo-seccion {
+            color: #16a34a;
+            font-size: 0.9rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #bbf7d0;
+            padding-bottom: 5px;
+        }
+
+        /* Estilo de la lista de capas (Casillas) */
+        .lista-capas {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .item-capa {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 10px;
+            background-color: #f8fafc;
+            border-radius: 6px;
+            border-left: 4px solid #16a34a;
+            transition: background-color 0.2s;
+        }
+
+        .item-capa:hover {
+            background-color: #f0fdf4;
+        }
+
+        .item-capa input[type="checkbox"] {
+            margin-right: 12px;
+            width: 18px;
+            height: 18px;
+            accent-color: #16a34a; /* Verde para el checkbox activado */
+            cursor: pointer;
+        }
+
+        .item-capa label {
+            cursor: pointer;
+            font-size: 1rem;
+            color: #333;
+            user-select: none;
+            flex-grow: 1;
+        }
+
+        /* Contenedor principal del Mapa */
+        #contenedor-mapa {
+            flex-grow: 1; /* Ocupa todo el resto de la pantalla derecha */
+            position: relative;
+        }
+
+        /* El mapa se estira a todo su nuevo contenedor */
+        #mi_mapa { 
+            height: 100%; 
+            width: 100%; 
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Panel Lateral Izquierdo -->
+    <div id="panel-lateral">
+        <div id="panel-header">
+            <h2>Geovisor Inmobiliario</h2>
+        </div>
+        <div id="panel-contenido">
+            <div class="titulo-seccion">Control de Capas</div>
+            <ul id="lista-capas" class="lista-capas">
+                <!-- Aquí se insertarán dinámicamente las casillas con JavaScript -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- Contenedor donde Leaflet dibujará el mapa -->
+    <div id="contenedor-mapa">
+        <div id="mi_mapa"></div>
+    </div>
+
+    <!-- Cargamos el motor interactivo de Leaflet (JavaScript) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // 1. Inicializar el mapa
+        // Centramos el mapa provisionalmente (ej. coordenadas de Ensenada, BC) y nivel de zoom 12
+        const mapa = L.map('mi_mapa').setView([31.8667, -116.5964], 12);
+
+        // 2. Agregar la capa base (el mapa de fondo de OpenStreetMap)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            maxZoom: 19
+        }).addTo(mapa);
+
+        // === NUEVO: Función maestra para agregar capas al panel lateral ===
+        function agregarCapaAlPanel(nombre, capa, estaActivaPorDefecto) {
+            const lista = document.getElementById('lista-capas');
+            const item = document.createElement('li');
+            item.className = 'item-capa';
+
+            // Crear la casilla (checkbox)
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = 'capa-' + nombre.replace(/\s+/g, '-').toLowerCase();
+            checkbox.checked = estaActivaPorDefecto;
+
+            // Crear el texto (label)
+            const label = document.createElement('label');
+            label.htmlFor = checkbox.id;
+            label.textContent = nombre;
+
+            // Lógica mágica para encender/apagar la capa
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    mapa.addLayer(capa);
+                } else {
+                    mapa.removeLayer(capa);
+                }
+            });
+
+            // Armar el elemento visual y agregarlo al panel
+            item.appendChild(checkbox);
+            item.appendChild(label);
+            lista.appendChild(item);
+
+            // Si le indicamos que inicie activa, la dibujamos en el mapa inmediatamente
+            if (estaActivaPorDefecto) {
+                mapa.addLayer(capa);
+            }
+        }
+        // =================================================================
+
+        // 3. Cargar el archivo GeoJSON
+        // IMPORTANTE: El archivo colonias.geojson debe estar en la misma carpeta que este index.html
+        fetch('colonias.geojson')
+            .then(respuesta => {
+                if (!respuesta.ok) {
+                    if (respuesta.status === 404) {
+                        throw new Error("Error 404: No se encontró el archivo. Verifica que se llame exactamente 'colonias.geojson' y esté en la misma carpeta.");
+                    }
+                    throw new Error("Error del servidor: " + respuesta.status);
+                }
+                return respuesta.json(); // Si el archivo tiene errores de texto/formato, fallará aquí
+            })
+            .then(datosGeoJSON => {
+                // 4. Crear la capa GeoJSON (¡Ojo! Le quitamos el .addTo(mapa) del final)
+                const capaColonias = L.geoJSON(datosGeoJSON, {
+                    // Estilo visual de los polígonos/líneas
+                    style: function (feature) {
+                        return {
+                            color: "#2563eb", // Color del borde (azul)
+                            weight: 2,        // Grosor del borde
+                            opacity: 1,       // Opacidad del borde
+                            fillColor: "#3b82f6", // Color de relleno
+                            fillOpacity: 0.4  // Opacidad del relleno
+                        };
+                    },
+                    // Qué hacer con cada elemento (colonia) al cargarlo
+                    onEachFeature: function (feature, layer) {
+                        // Crear un popup automático con todos los datos que tenga el GeoJSON
+                        let contenidoPopup = "<b>Datos de la Colonia:</b><br><hr>";
+                        if (feature.properties) {
+                            // Recorremos todas las propiedades (atributos) y las mostramos
+                            for (let propiedad in feature.properties) {
+                                contenidoPopup += `<b>${propiedad}:</b> ${feature.properties[propiedad]}<br>`;
+                            }
+                        }
+                        layer.bindPopup(contenidoPopup);
+                    }
+                }); // <-- Cambio importante: cerramos aquí sin agregarla directamente
+
+                // 4.5. Enviar la capa a nuestro nuevo Panel de Control para que la administre
+                // Le pasamos el nombre que queremos, la variable de la capa, y 'true' para que empiece encendida.
+                agregarCapaAlPanel('Colonias', capaColonias, true);
+
+                // 5. Ajustar el mapa para que todas las colonias se vean en pantalla
+                mapa.fitBounds(capaColonias.getBounds());
+            })
+            .catch(error => {
+                console.error('Error real detectado:', error);
+                alert("Hubo un problema:\n\n" + error.message + "\n\nRevisa la consola (presiona F12) para más detalles.");
+            });
+    </script>
+
+</body>
+</html>
