@@ -109,20 +109,75 @@
             height: 100%; 
             width: 100%; 
         }
+
+        /* --- NUEVO: ESTILOS PARA RESPONSIVE (MÓVILES) --- */
+        #btn-menu {
+            display: none; /* Oculto en computadoras de escritorio */
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 2000;
+            background-color: #16a34a;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        @media (max-width: 768px) {
+            #btn-menu {
+                display: block; /* Visible solo en celulares */
+            }
+            #panel-lateral {
+                position: absolute;
+                left: -320px; /* Escondido a la izquierda por defecto */
+                height: 100vh;
+                transition: left 0.3s ease; /* Animación de deslizamiento */
+            }
+            #panel-lateral.abierto {
+                left: 0; /* Aparece al activarse */
+            }
+        }
     </style>
 </head>
 <body>
 
+    <!-- NUEVO: Botón para mostrar panel en móviles -->
+    <button id="btn-menu">☰ Capas</button>
+
     <!-- Panel Lateral Izquierdo -->
     <div id="panel-lateral">
         <div id="panel-header">
-            <h2>Geovisor Inmobiliario</h2>
+            <h2>Visor Cartográfico</h2>
         </div>
         <div id="panel-contenido">
             <div class="titulo-seccion">Control de Capas</div>
             <ul id="lista-capas" class="lista-capas">
                 <!-- Aquí se insertarán dinámicamente las casillas con JavaScript -->
             </ul>
+            
+            <!-- NUEVO: Simbología para la Zonificación -->
+            <div class="titulo-seccion" style="margin-top: 30px;">Simbología Zonificación</div>
+            <div id="leyenda" style="font-size: 0.9rem; color: #4b5563;">
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span style="background-color: #fde047; border: 1px solid #ca8a04; width: 16px; height: 16px; margin-right: 10px; border-radius: 3px;"></span> Habitacional
+                </div>
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span style="background-color: #ef4444; border: 1px solid #b91c1c; width: 16px; height: 16px; margin-right: 10px; border-radius: 3px;"></span> Comercial
+                </div>
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span style="background-color: #22c55e; border: 1px solid #15803d; width: 16px; height: 16px; margin-right: 10px; border-radius: 3px;"></span> Conservación
+                </div>
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span style="background-color: #3b82f6; border: 1px solid #1d4ed8; width: 16px; height: 16px; margin-right: 10px; border-radius: 3px;"></span> Equipamiento
+                </div>
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span style="background-color: #94a3b8; border: 1px solid #475569; width: 16px; height: 16px; margin-right: 10px; border-radius: 3px;"></span> Otros
+                </div>
+            </div>
         </div>
     </div>
 
@@ -135,6 +190,15 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script>
+        // === NUEVO: Lógica para el menú en móviles ===
+        const btnMenu = document.getElementById('btn-menu');
+        const panelLateral = document.getElementById('panel-lateral');
+
+        btnMenu.addEventListener('click', () => {
+            panelLateral.classList.toggle('abierto');
+        });
+        // =============================================
+
         // 1. Inicializar el mapa
         // Centramos el mapa provisionalmente (ej. coordenadas de Ensenada, BC) y nivel de zoom 12
         const mapa = L.map('mi_mapa').setView([31.8667, -116.5964], 12);
@@ -232,6 +296,65 @@
             .catch(error => {
                 console.error('Error real detectado:', error);
                 alert("Hubo un problema:\n\n" + error.message + "\n\nRevisa la consola (presiona F12) para más detalles.");
+            });
+
+        // === NUEVO: Cargar la capa de Zonificación Secundaria ===
+        // IMPORTANTE: Debes tener el archivo 'zonificacion_secundaria.geojson' en la misma carpeta
+        fetch('zonificacion_secundaria.geojson')
+            .then(respuesta => {
+                if (!respuesta.ok) throw new Error("No se encontró el archivo de zonificación secundaria");
+                return respuesta.json();
+            })
+            .then(datosGeoJSON => {
+                
+                // Función auxiliar para determinar el color según el uso de suelo
+                function getColorZonificacion(tipo) {
+                    if (!tipo) return "#94a3b8"; // Gris por defecto si viene vacío
+                    const t = String(tipo).toUpperCase().trim();
+                    
+                    // Habitacional (Amarillo)
+                    if (t === 'H' || t.startsWith('H') || t.includes('HABITACIONAL')) return "#fde047"; 
+                    // Comercial (Rojo) - Evitando confundir con CO de conservación
+                    if (t === 'C' || t === 'CU' || (t.startsWith('C') && !t.startsWith('CO') && !t.startsWith('CON')) || t.includes('COMERCIAL')) return "#ef4444"; 
+                    // Conservación (Verde)
+                    if (t === 'CO' || t.startsWith('CON') || t.includes('CONSERV')) return "#22c55e"; 
+                    // Equipamiento (Azul)
+                    if (t === 'E' || t.startsWith('E') || t.includes('EQUIPA')) return "#3b82f6"; 
+                    
+                    return "#94a3b8"; // Gris para cualquier otro uso no contemplado
+                }
+
+                const capaZonificacion = L.geoJSON(datosGeoJSON, {
+                    // Estilo visual basado en atributos
+                    style: function (feature) {
+                        // Buscamos la propiedad ZS_Gral (o variaciones de cómo se pueda llamar)
+                        const valorZonificacion = feature.properties.ZS_Gral || feature.properties.zs_gral || feature.properties.zs_general || "";
+                        const colorAsignado = getColorZonificacion(valorZonificacion);
+
+                        return {
+                            color: colorAsignado, // Color del borde
+                            weight: 1.5,
+                            opacity: 1,
+                            fillColor: colorAsignado, // Color de relleno
+                            fillOpacity: 0.55 // Un poco transparente para ver las calles de fondo
+                        };
+                    },
+                    onEachFeature: function (feature, layer) {
+                        let contenidoPopup = "<b>Zonificación Secundaria:</b><br><hr>";
+                        if (feature.properties) {
+                            for (let propiedad in feature.properties) {
+                                contenidoPopup += `<b>${propiedad}:</b> ${feature.properties[propiedad]}<br>`;
+                            }
+                        }
+                        layer.bindPopup(contenidoPopup);
+                    }
+                });
+
+                // Agregamos la capa al panel. Inicia apagada (false)
+                agregarCapaAlPanel('Zonificación Secundaria', capaZonificacion, false);
+            })
+            .catch(error => {
+                console.error('Aviso: Capa de zonificación secundaria no cargada.', error);
             });
     </script>
 
